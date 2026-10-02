@@ -106,8 +106,13 @@ def faixa_de(prob):
 
 
 def pontuar(df):
-    """Aplica o modelo. Nunca chama fit -- treinar em producao e outra coisa."""
-    X = df[config.FEATURES]
+    """Aplica o modelo. Nunca chama fit -- treinar em producao e outra coisa.
+    
+    As colunas vem da SIGNATURE da versao carregada, nao do config. O arquivo
+    continua trazendo as 15 (config.FEATURES, que vai inteiro para o JSONB);
+    cada versao pega so as que conhece.
+    """
+    X = df[COLUNAS_CONTRATO]  
     prob = MODELO.predict_proba(X)[:, 1]
     classe = (prob >= config.LIMIAR_DECISAO).astype(int)
     return prob, classe
