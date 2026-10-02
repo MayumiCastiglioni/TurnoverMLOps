@@ -64,8 +64,15 @@ def main():
     ap.add_argument("--incorporar", required=True, help="nome do lote no banco")
     ap.add_argument("--gabarito", required=True, help="csv em dados/ com o rotulo")
     ap.add_argument("--motivo", required=True,
-                    help="por que este retreino existe. Vai como tag no MLflow")
+                    help="por que este retreino existe. Vai como tag no MLflow")    
+    ap.add_argument("--sem", nargs="+", default=[], metavar="COLUNA",
+                help="features que este modelo NAO vai usar")
     args = ap.parse_args()
+
+    desconhecidas = [c for c in args.sem if c not in config.FEATURES]
+    if desconhecidas:
+        raise SystemExit(f"--sem com coluna que nao existe: {desconhecidas}")
+    features = [c for c in config.FEATURES if c not in args.sem]
 
     banco.conferir()
     colunas = [config.COLUNA_ID] + config.FEATURES + [config.COLUNA_ALVO]
@@ -80,7 +87,7 @@ def main():
         stratify=lote[config.COLUNA_ALVO])
 
     treino = pd.concat([treino_antigo[colunas], lote_treino], ignore_index=True)
-    X, y = treino[config.FEATURES], treino[config.COLUNA_ALVO]
+    X, y = treino[features], treino[config.COLUNA_ALVO]          # antes: config.FEATURES
 
     print(f"treino: {len(treino_antigo)} linhas antigas + {len(lote_treino)} do lote "
           f"= {len(treino)}")
@@ -100,7 +107,7 @@ def main():
     for nome, tabela in (("congelada", config.TABELA_VALIDACAO),
                          ("atual", config.TABELA_VALIDACAO_ATUAL)):
         conjunto = banco.carregar_conjunto(tabela)
-        pred = modelo.predict(conjunto[config.FEATURES])
+        pred = modelo.predict(conjunto[features])
         real = conjunto[config.COLUNA_ALVO]
         medidas[f"f1_validacao_{nome}"] = f1_score(real, pred)
         medidas[f"accuracy_validacao_{nome}"] = accuracy_score(real, pred)
@@ -118,6 +125,7 @@ def main():
             "origem": "mlflow",
             "lineage": "completo",      # a diferenca em relacao a v1
             "commit": commit_atual(),
+            "features_removidas": ",".join(args.sem) or "nenhuma",   # tag nova
         })
 
         # Lineage de verdade: os dois datasets que o .fit() realmente viu.
@@ -132,7 +140,7 @@ def main():
 
         mlflow.log_params({
             "tipo_modelo": type(modelo).__name__,
-            "n_features": len(config.FEATURES),
+            "n_features": len(features),
             "linhas_treino": len(treino),
             "linhas_do_lote": len(lote_treino),
             "fracao_validacao": FRACAO_VALIDACAO,
